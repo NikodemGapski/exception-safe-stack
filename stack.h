@@ -17,7 +17,7 @@ namespace cxx {
 		// specify it as such for user clarity.
 		stack& operator=(stack);
 
-		// void push(const K&, const V&);
+		void push(const K&, const V&);
 		void pop();
 		// void pop(const K&);
 
@@ -46,13 +46,19 @@ namespace cxx {
 	class stack<K, V>::stack_data {
 	public:
 		struct element_t;
+		struct value_data_t;
 		using value_list_t = std::list<element_t>;
-		using value_data_t = std::pair<value_list_t, K*>;
 		using map_t = std::map<K, std::shared_ptr<value_data_t>>;
 		using stack_list_t = std::list<std::weak_ptr<value_data_t>>;
 		struct element_t {
 			V value;
+			// List iterators are stable.
 			stack_list_t::iterator it;
+		};
+		struct value_data_t {
+			value_list_t list;
+			// Map iterators are stable.
+			map_t::iterator it;
 		};
 
 		stack_data();
@@ -100,17 +106,21 @@ namespace cxx {
 	}
 
 	template <class K, class V>
+	void stack<K, V>::push(const K& key, const V& value) {
+
+	}
+
+	template <class K, class V>
 	void stack<K, V>::pop() {
 		if (size() == 0)
 			throw std::invalid_argument("Tried to use pop() on empty stack.");
 		// Otherwise we're good to go and no exceptions will be thrown.
 		auto& last = *get_data().stack_list.back().get();
-		auto& [list, key] = last;
-		list.pop();
-		if (list.empty()) {
+		last.list.pop();
+		if (last.list.empty()) {
 			// Remove the key from the map
 			// (also deallocates the value_data).
-			get_data().key_map.erase(*key);
+			get_data().key_map.erase(last.it->first);
 		}
 		get_data().stack_list.pop_back();
 	}
@@ -126,7 +136,7 @@ namespace cxx {
 
 		if (res == get_data().key_map.end()) return 0;
 		// Return the size of the corresponding value list.
-		return res->second.get()->first.size();
+		return res->second.get()->list.size();
 	}
 
 	template <class K, class V>
