@@ -54,6 +54,8 @@ namespace cxx {
 			V value;
 			// List iterators are stable.
 			stack_list_t::iterator it;
+			element_t();
+			element_t(const V&, const stack_list_t::iterator);
 		};
 		struct value_data_t {
 			value_list_t list;
@@ -118,7 +120,7 @@ namespace cxx {
 
 	template <class K, class V>
 	void stack<K, V>::push(const K& key, const V& value) {
-		get_data().push();
+		get_data().push(key, value);
 	}
 
 	template <class K, class V>
@@ -183,16 +185,34 @@ namespace cxx {
 	
 	template <class K, class V>
 	void stack<K, V>::stack_data::push(const K& key, const V& value) {
-		// Create a new value element.
-		element_t new_el;
-		new_el.value = value;
-		// Create a new value data object
-		// if one doesn't already exist.
-		auto it = get_data().key_map.find(key);
-		if (it == get_data().key_map.end()) {
-			auto ptr = std::make_shared<value_data_t>();
-			ptr.get()->list.push_back(new_el);
+		// Append to stack list [member modified].
+		stack_list.push_back(std::weak_ptr<value_data_t>());
+		auto stack_it = stack_list.end(); --stack_it;
+		try {
+			// Create a new value element.
+			element_t new_el(value, stack_it);
+			// Create a new value data object
+			// if one doesn't already exist.
+			auto it = key_map.find(key);
+			std::shared_ptr<value_data_t> ptr;
+			if (it == key_map.end()) {
+				ptr = std::make_shared<value_data_t>();
+				ptr.get()->list.push_back(new_el);
+				// Insert to key_map [member modified].
+				key_map.insert({key, ptr});
+				ptr.get()->it = key_map.find(key); // noexcept
+			} else {
+				ptr = it->second;
+				// Insert new element to list [member modified].
+				ptr.get()->list.push_back(new_el);
+			}
+			*stack_it = std::weak_ptr<value_data_t>(ptr); // noexcept
+		} catch(...) {
+			// Rollback stack_list change.
+			stack_list.pop_back();
+			throw;
 		}
+		++size;
 	}
 
 	template <class K, class V>
@@ -208,6 +228,7 @@ namespace cxx {
 			key_map.erase(last.it->first);
 		}
 		stack_list.pop_back();
+		--size;
 	}
 
 	template <class K, class V>
@@ -216,4 +237,12 @@ namespace cxx {
 		key_map.clear();
 		size = 0;
 	}
+
+	template <class K, class V>
+	stack<K, V>::stack_data::element_t::element_t() {}
+
+	template <class K, class V>
+	stack<K, V>::stack_data::element_t::element_t(const V& value, const stack_list_t::iterator it)
+	: value(value)
+	, it(it) {}
 }
