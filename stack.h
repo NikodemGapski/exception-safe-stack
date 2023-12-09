@@ -220,12 +220,12 @@ namespace cxx {
 		if (size == 0)
 			throw std::invalid_argument("Tried to use pop() on empty stack.");
 		// Otherwise we're good to go and no exceptions will be thrown.
-		auto& last = stack_list.back().get();
-		last.list.pop();
-		if (last.list.empty()) {
+		auto last = stack_list.back().lock().get();
+		last->list.pop_back();
+		if (last->list.empty()) {
 			// Remove the key from the map
 			// (also deallocates the value_data).
-			key_map.erase(last.it->first);
+			key_map.erase(last->it->first);
 		}
 		stack_list.pop_back();
 		--size;
