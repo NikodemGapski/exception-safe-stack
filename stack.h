@@ -65,6 +65,17 @@ namespace cxx {
 		stack_data(stack_data&&) noexcept;
 		stack_data(const stack_data&);
 
+		void push(const K&, const V&);
+		void pop();
+		// void pop(const K&);
+
+		// std::pair<const K&, V&> front() const;
+		// std::pair<const K&, const V&> front() const;
+		// V& front(const K&) const;
+		// const V& front(const K&) const;
+
+		void clear();
+
 		stack_list_t stack_list;
 		map_t key_map;
 		size_t size;
@@ -107,22 +118,12 @@ namespace cxx {
 
 	template <class K, class V>
 	void stack<K, V>::push(const K& key, const V& value) {
-
+		get_data().push();
 	}
 
 	template <class K, class V>
 	void stack<K, V>::pop() {
-		if (size() == 0)
-			throw std::invalid_argument("Tried to use pop() on empty stack.");
-		// Otherwise we're good to go and no exceptions will be thrown.
-		auto& last = *get_data().stack_list.back().get();
-		last.list.pop();
-		if (last.list.empty()) {
-			// Remove the key from the map
-			// (also deallocates the value_data).
-			get_data().key_map.erase(last.it->first);
-		}
-		get_data().stack_list.pop_back();
+		get_data().pop();
 	}
 
 	template <class K, class V>
@@ -145,7 +146,7 @@ namespace cxx {
 			// Release the resource and create a new empty one.
 			data = std::make_shared<stack_data>();
 		} else {
-			get_data() = stack_data();
+			get_data().clear();
 		}
 	}
 
@@ -180,4 +181,39 @@ namespace cxx {
 	, key_map(other.key_map)
 	, size(other.size) {}
 	
+	template <class K, class V>
+	void stack<K, V>::stack_data::push(const K& key, const V& value) {
+		// Create a new value element.
+		element_t new_el;
+		new_el.value = value;
+		// Create a new value data object
+		// if one doesn't already exist.
+		auto it = get_data().key_map.find(key);
+		if (it == get_data().key_map.end()) {
+			auto ptr = std::make_shared<value_data_t>();
+			ptr.get()->list.push_back(new_el);
+		}
+	}
+
+	template <class K, class V>
+	void stack<K, V>::stack_data::pop() {
+		if (size == 0)
+			throw std::invalid_argument("Tried to use pop() on empty stack.");
+		// Otherwise we're good to go and no exceptions will be thrown.
+		auto& last = stack_list.back().get();
+		last.list.pop();
+		if (last.list.empty()) {
+			// Remove the key from the map
+			// (also deallocates the value_data).
+			key_map.erase(last.it->first);
+		}
+		stack_list.pop_back();
+	}
+
+	template <class K, class V>
+	void stack<K, V>::stack_data::clear() {
+		stack_list.clear();
+		key_map.clear();
+		size = 0;
+	}
 }
