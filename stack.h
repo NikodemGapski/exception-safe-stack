@@ -93,6 +93,11 @@ namespace cxx {
     requires std::forward_iterator<K>
     class stack<K, V>::const_iterator {
     public:
+        using value_type = K;
+        using pointer = K*;
+        using reference = K&;
+        using iterator_category = std::forward_iterator_tag;
+
         const_iterator();
         const_iterator(stack_data::map_t::const_iterator);
         const_iterator(const const_iterator&);
