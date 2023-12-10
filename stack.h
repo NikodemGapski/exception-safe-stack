@@ -3,7 +3,6 @@
 #include <map>
 #include <memory>
 
-
 namespace cxx {
 
     template <class K, class V>
@@ -35,15 +34,23 @@ namespace cxx {
         class const_iterator;
         const_iterator cbegin() const noexcept;
         const_iterator cend() const noexcept;
-        
+
         template <class A, class B>
-        friend void swap(stack<A, B>&, stack<A, B>&) noexcept;
+        friend void swap(stack<A, B>&, stack<A, B>&);
     private:
         class stack_data;
         std::shared_ptr<stack_data> data;
         bool is_unsharable;
 
         stack_data& get_data() const noexcept;
+
+        // Note: if this method doesn't throw, a fresh new copy
+        // will have been created. However, the object's perceived
+        // state will not have been changed.
+        // That's why we can perform potentially throwing modifications
+        // later on without having to worry about rollbacking to the
+        // previous state (after all, we've done some good work, why waste it?).
+        void make_copy_if_needed(bool);
     };
 
     template<class K, class V>
@@ -156,21 +163,25 @@ namespace cxx {
 
     template <class K, class V>
     void stack<K, V>::push(const K& key, const V& value) {
+        make_copy_if_needed(false);
         get_data().push(key, value);
     }
 
     template <class K, class V>
     void stack<K, V>::pop() {
+        make_copy_if_needed(false);
         get_data().pop();
     }
 
     template <class K, class V>
     void stack<K, V>::pop(const K& k) {
+        make_copy_if_needed(false);
         get_data().pop(k);
     }
 
     template <class K, class V>
     std::pair<const K&, V&> stack<K, V>::front() {
+        make_copy_if_needed(true);
         return get_data().front();
     }
 
@@ -181,6 +192,7 @@ namespace cxx {
 
     template <class K, class V>
     V& stack<K, V>::front(const K& k) {
+        make_copy_if_needed(true);
         return get_data().front(k);
     }
 
@@ -214,16 +226,41 @@ namespace cxx {
     }
 
     template <class K, class V>
-    void swap(stack<K, V>& a, stack<K, V>& b) noexcept {
-        // Enable ADL.
-        using std::swap;
-        swap(a.data, b.data);
-        swap(a.is_unsharable, b.is_unsharable);
+    stack<K, V>::const_iterator stack<K, V>::cbegin() const noexcept {
+        return const_iterator(get_data().key_map.cbegin());
+    }
+
+    template <class K, class V>
+    stack<K, V>::const_iterator stack<K, V>::cend() const noexcept {
+        return const_iterator(get_data().key_map.cend());
+    }
+
+    template <class K, class V>
+    void swap(stack<K, V>& a, stack<K, V>& b) {
+        // This swap omits the need for move assignment
+        // in stack<K, V>.
+        std::swap(a.data, b.data);
+        std::swap(a.is_unsharable, b.is_unsharable);
     }
 
     template <class K, class V>
     stack<K, V>::stack_data& stack<K, V>::get_data() const noexcept {
         return *data.get();
+    }
+
+    template <class K, class V>
+    void stack<K, V>::make_copy_if_needed(bool mark_unshared) {
+        if (data.use_count() > 1) {
+            auto new_data = std::make_shared<stack_data>(get_data());
+            std::swap(data, new_data); // won't throw
+            is_unsharable = mark_unshared;
+        }
+        // We *always* need to be marked unsharable
+        // if we're told to. However, if we're a lonely
+        // unsharable stack, then any operation that
+        // doesn't reallocate our data cannot give us
+        // the sharable status.
+        if (mark_unshared) is_unsharable = true;
     }
 
     // -- stack_data -- //
@@ -240,9 +277,22 @@ namespace cxx {
 
     template <class K, class V>
     stack<K, V>::stack_data::stack_data(const stack_data& other)
-            : stack_list(other.stack_list)
-            , key_map(other.key_map)
-            , size(other.size) {}
+            : size(0) {
+        // We have to make a deep copy.
+        std::map<K, typename value_list_t::iterator> next_value;
+        for (auto& el : other.stack_list) {
+            // Retrieve the (key, value) pair.
+            auto& value_data = *el.lock().get();
+            const K& key = value_data.it->first;
+            auto it = next_value.find(key);
+            if (it == next_value.end()) {
+                std::tie(it, std::ignore)
+                    = next_value.insert({key, value_data.list.begin()});
+            }
+            push(key, it->second->value);
+            ++it;
+        }
+    }
 
     template <class K, class V>
     void stack<K, V>::stack_data::push(const K& key, const V& value) {
@@ -406,16 +456,6 @@ namespace cxx {
     template <class K, class V>
     const K& stack<K, V>::const_iterator::operator->() const {
         return operator*();
-    }
-
-    template <class K, class V>
-    stack<K, V>::const_iterator stack<K, V>::cbegin() const noexcept {
-        return const_iterator(get_data().key_map.cbegin());
-    }
-
-    template <class K, class V>
-    stack<K, V>::const_iterator stack<K, V>::cend() const noexcept {
-        return const_iterator(get_data().key_map.cend());
     }
 }
 
