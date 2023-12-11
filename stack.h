@@ -35,12 +35,13 @@ namespace cxx {
         const_iterator cbegin() const noexcept;
         const_iterator cend() const noexcept;
 
-        template <class A, class B>
-        friend void swap(stack<A, B>&, stack<A, B>&);
     private:
         class stack_data;
         std::shared_ptr<stack_data> data;
         bool is_unsharable;
+
+        template <class A, class B>
+        friend void swap(stack<A, B>&, stack<A, B>&) noexcept;
 
         stack_data& get_data() const noexcept;
 
@@ -56,6 +57,7 @@ namespace cxx {
     template<class K, class V>
     class stack<K, V>::stack_data {
     public:
+        // Types.
         struct element_t;
         struct value_data_t;
         using value_list_t = std::list<element_t>;
@@ -65,8 +67,8 @@ namespace cxx {
             V value;
             // List iterators are stable.
             stack_list_t::iterator it;
-            element_t();
-            element_t(const V&, const stack_list_t::iterator);
+            element_t() = default;
+            element_t(const V&, stack_list_t::iterator);
         };
         struct value_data_t {
             value_list_t list;
@@ -74,7 +76,13 @@ namespace cxx {
             map_t::iterator it;
         };
 
-        stack_data();
+        // Member variables.
+        stack_list_t stack_list;
+        map_t key_map;
+        size_t size;
+
+        // Member methods.
+        stack_data() noexcept;
         stack_data(stack_data&&) noexcept;
         stack_data(const stack_data&);
 
@@ -88,28 +96,22 @@ namespace cxx {
         std::pair<const K&, V&> front();
         V& front(const K&);
 
-        void clear();
-
-        stack_list_t stack_list;
-        map_t key_map;
-        size_t size;
+        void clear() noexcept;
     };
 
     // A wrapper for the map's const iterator.
     template<class K, class V>
-    requires std::forward_iterator<K>
     class stack<K, V>::const_iterator {
+        using map_t_it = stack_data::map_t::const_iterator;
     public:
-        using value_type = K;
-        using pointer = K*;
-        using reference = K&;
         using iterator_category = std::forward_iterator_tag;
+        using value_type = K;
+        using difference_type = map_t_it::difference_type;
 
-        const_iterator();
-        const_iterator(stack_data::map_t::const_iterator);
-        const_iterator(const const_iterator&);
+        const_iterator() = default;
+        const_iterator(const const_iterator&) noexcept;
 
-        const_iterator& operator=(const const_iterator&);
+        const_iterator& operator=(const const_iterator&) noexcept;
 
         const_iterator& operator++();
         const_iterator operator++(int);
@@ -117,11 +119,17 @@ namespace cxx {
         const K& operator*() const;
         const K& operator->() const;
 
-        bool operator==(const const_iterator&) const;
-        bool operator!=(const const_iterator&) const;
+        bool operator==(const const_iterator&) const noexcept;
+        bool operator!=(const const_iterator&) const noexcept;
 
     private:
-        stack_data::map_t::const_iterator it;
+        map_t_it it;
+
+        const_iterator(map_t_it) noexcept;
+
+        // Can construct the iterator by providing a map_t_it.
+        friend const_iterator stack::cbegin() const noexcept;
+        friend const_iterator stack::cend() const noexcept;
     };
 
 
@@ -236,7 +244,7 @@ namespace cxx {
     }
 
     template <class K, class V>
-    void swap(stack<K, V>& a, stack<K, V>& b) {
+    void swap(stack<K, V>& a, stack<K, V>& b) noexcept {
         // This swap omits the need for move assignment
         // in stack<K, V>.
         std::swap(a.data, b.data);
@@ -266,7 +274,7 @@ namespace cxx {
     // -- stack_data -- //
 
     template <class K, class V>
-    stack<K, V>::stack_data::stack_data()
+    stack<K, V>::stack_data::stack_data() noexcept
             : size(0) {}
 
     template <class K, class V>
@@ -389,17 +397,15 @@ namespace cxx {
     }
 
     template <class K, class V>
-    void stack<K, V>::stack_data::clear() {
+    void stack<K, V>::stack_data::clear() noexcept {
         stack_list.clear();
         key_map.clear();
         size = 0;
     }
 
-    template <class K, class V>
-    stack<K, V>::stack_data::element_t::element_t() {}
 
     template <class K, class V>
-    stack<K, V>::stack_data::element_t::element_t(const V& value, const stack_list_t::iterator it)
+    stack<K, V>::stack_data::element_t::element_t(const V& value, stack_list_t::iterator it)
             : value(value)
             , it(it) {}
 
@@ -407,44 +413,41 @@ namespace cxx {
     // -- const_iterator -- //
 
     template <class K, class V>
-    stack<K, V>::const_iterator::const_iterator() {}
-
-    template <class K, class V>
-    stack<K, V>::const_iterator::const_iterator(stack_data::map_t::const_iterator it)
+    stack<K, V>::const_iterator::const_iterator(map_t_it it) noexcept
             : it(it) {}
 
     template <class K, class V>
-    stack<K, V>::const_iterator::const_iterator(const const_iterator& other)
+    stack<K, V>::const_iterator::const_iterator(const const_iterator& other) noexcept
             : it(other.it) {}
 
     template <class K, class V>
-    stack<K, V>::const_iterator &
-            stack<K, V>::const_iterator::operator=(const const_iterator& iter) {
+    stack<K, V>::const_iterator&
+    stack<K, V>::const_iterator::operator=(const const_iterator& iter) noexcept {
         it = iter.it;
     }
 
     template <class K, class V>
-    stack<K, V>::const_iterator &
-            stack<K, V>::const_iterator::operator++() {
+    stack<K, V>::const_iterator&
+    stack<K, V>::const_iterator::operator++() {
         ++it;
         return *this;
     }
 
     template <class K, class V>
     stack<K, V>::const_iterator
-            stack<K, V>::const_iterator::operator++(int) {
+    stack<K, V>::const_iterator::operator++(int) {
         const_iterator tmp(*this);
         operator++();
         return tmp;
     }
 
     template <class K, class V>
-    bool stack<K, V>::const_iterator::operator==(const const_iterator& iter) const {
+    bool stack<K, V>::const_iterator::operator==(const const_iterator& iter) const noexcept {
         return it == iter.it;
     }
 
     template <class K, class V>
-    bool stack<K, V>::const_iterator::operator!=(const const_iterator& iter) const {
+    bool stack<K, V>::const_iterator::operator!=(const const_iterator& iter) const noexcept {
         return !operator==(iter);
     }
 
@@ -458,4 +461,3 @@ namespace cxx {
         return operator*();
     }
 }
-
