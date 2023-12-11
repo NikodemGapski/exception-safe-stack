@@ -43,15 +43,13 @@ namespace cxx {
         template <class A, class B>
         friend void swap(stack<A, B>&, stack<A, B>&) noexcept;
 
+        using new_state_t = std::pair<std::shared_ptr<stack_data>, bool>;
+        
         stack_data& get_data() const noexcept;
+        stack_data& get_data(const new_state_t&) const noexcept;
+        void assume_state(const new_state_t&) noexcept;
 
-        // Note: if this method doesn't throw, a fresh new copy
-        // will have been created. However, the object's perceived
-        // state will not have been changed.
-        // That's why we can perform potentially throwing modifications
-        // later on without having to worry about rollbacking to the
-        // previous state (after all, we've done some good work, why waste it?).
-        void make_copy_if_needed(bool);
+        new_state_t make_copy_if_needed(bool) const;
     };
 
     template<class K, class V>
@@ -171,25 +169,28 @@ namespace cxx {
 
     template <class K, class V>
     void stack<K, V>::push(const K& key, const V& value) {
-        make_copy_if_needed(false);
-        get_data().push(key, value);
+        auto new_state = make_copy_if_needed(false);
+        get_data(new_state).push(key, value);
+        assume_state(new_state);
     }
 
     template <class K, class V>
     void stack<K, V>::pop() {
-        make_copy_if_needed(false);
-        get_data().pop();
+        auto new_state = make_copy_if_needed(false);
+        get_data(new_state).pop();
+        assume_state(new_state);
     }
 
     template <class K, class V>
     void stack<K, V>::pop(const K& k) {
-        make_copy_if_needed(false);
-        get_data().pop(k);
+        auto new_state = make_copy_if_needed(false);
+        get_data(new_state).pop(k);
+        assume_state(new_state);
     }
 
     template <class K, class V>
     std::pair<const K&, V&> stack<K, V>::front() {
-        make_copy_if_needed(true);
+        assume_state(make_copy_if_needed(true));
         return get_data().front();
     }
 
@@ -200,7 +201,7 @@ namespace cxx {
 
     template <class K, class V>
     V& stack<K, V>::front(const K& k) {
-        make_copy_if_needed(true);
+        assume_state(make_copy_if_needed(true));
         return get_data().front(k);
     }
 
@@ -257,18 +258,28 @@ namespace cxx {
     }
 
     template <class K, class V>
-    void stack<K, V>::make_copy_if_needed(bool mark_unshared) {
+    stack<K, V>::stack_data&
+    stack<K, V>::get_data(const new_state_t& state) const noexcept {
+        return *state.first.get();
+    }
+
+    template <class K, class V>
+    void stack<K, V>::assume_state(const new_state_t& state) noexcept {
+        std::tie(data, is_unsharable) = state;
+    }
+
+    template <class K, class V>
+    stack<K, V>::new_state_t
+    stack<K, V>::make_copy_if_needed(bool mark_unshared) const {
         if (data.use_count() > 1) {
-            auto new_data = std::make_shared<stack_data>(get_data());
-            std::swap(data, new_data); // won't throw
-            is_unsharable = mark_unshared;
+            return {std::make_shared<stack_data>(get_data()), mark_unshared};
         }
         // We *always* need to be marked unsharable
         // if we're told to. However, if we're a lonely
         // unsharable stack, then any operation that
         // doesn't reallocate our data cannot give us
         // the sharable status.
-        if (mark_unshared) is_unsharable = true;
+        return {data, mark_unshared ? true : is_unsharable};
     }
 
     // -- stack_data -- //
