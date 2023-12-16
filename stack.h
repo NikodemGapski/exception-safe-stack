@@ -40,8 +40,10 @@ namespace cxx {
         std::shared_ptr<stack_data> data;
         bool is_unsharable;
 
-        template <class A, class B>
-        friend void swap(stack<A, B>&, stack<A, B>&) noexcept;
+        // Normally, we'd make this a free function,
+        // but there is no mention of swap in the specification,
+        // so we have to leave it hidden.
+        void swap(stack&, stack&) noexcept;
 
         using new_state_t = std::pair<std::shared_ptr<stack_data>, bool>;
         
@@ -132,7 +134,6 @@ namespace cxx {
 
 
     // ---------- Implementations ---------- //
-
     // -- stack -- //
 
     template <class K, class V>
@@ -245,7 +246,7 @@ namespace cxx {
     }
 
     template <class K, class V>
-    void swap(stack<K, V>& a, stack<K, V>& b) noexcept {
+    void stack<K, V>::swap(stack& a, stack& b) noexcept {
         // This swap omits the need for move assignment
         // in stack<K, V>.
         std::swap(a.data, b.data);
@@ -274,12 +275,12 @@ namespace cxx {
         if (data.use_count() > 1) {
             return {std::make_shared<stack_data>(get_data()), mark_unshared};
         }
-        // We *always* need to be marked unsharable
-        // if we're told to. However, if we're a lonely
-        // unsharable stack, then any operation that
-        // doesn't reallocate our data cannot give us
-        // the sharable status.
-        return {data, mark_unshared ? true : is_unsharable};
+        // The problem specification states that we
+        // must *always* assume mark_unshared, even if
+        // we run at risk of having a rogue reference
+        // to multiple data instances (it's the user's
+        // responsibility not to use such reference).
+        return {data, mark_unshared};
     }
 
     // -- stack_data -- //
@@ -329,8 +330,7 @@ namespace cxx {
                 ptr = std::make_shared<value_data_t>();
                 ptr.get()->list.push_back(new_el);
                 // Insert to key_map [member modified].
-                key_map.insert({key, ptr});
-                ptr.get()->it = key_map.find(key); // noexcept
+                ptr.get()->it = key_map.insert({key, ptr}).first;
             } else {
                 ptr = it->second;
                 // Insert new element to list [member modified].
