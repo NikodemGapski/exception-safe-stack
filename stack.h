@@ -110,8 +110,8 @@ namespace cxx {
 
         const_iterator& operator=(const const_iterator&) noexcept;
 
-        const_iterator& operator++();
-        const_iterator operator++(int);
+        const_iterator& operator++() noexcept;
+        const_iterator operator++(int) noexcept;
 
         const K& operator*() const;
         const K& operator->() const;
@@ -230,6 +230,7 @@ namespace cxx {
         } else {
             get_data().clear();
         }
+        is_unsharable = false;
     }
 
     template <class K, class V>
@@ -329,7 +330,7 @@ namespace cxx {
                 // Insert new element to list [member modified].
                 ptr->list.push_back(new_el);
             }
-            *stack_it = std::weak_ptr<value_data_t>(ptr); // noexcept
+            *stack_it = std::weak_ptr<value_data_t>(ptr); // nothrow
         } catch(...) {
             // Rollback stack_list change.
             stack_list.pop_back();
@@ -431,14 +432,14 @@ namespace cxx {
 
     template <class K, class V>
     stack<K, V>::const_iterator&
-    stack<K, V>::const_iterator::operator++() {
+    stack<K, V>::const_iterator::operator++() noexcept {
         ++it;
         return *this;
     }
 
     template <class K, class V>
     stack<K, V>::const_iterator
-    stack<K, V>::const_iterator::operator++(int) {
+    stack<K, V>::const_iterator::operator++(int) noexcept {
         const_iterator tmp(*this);
         operator++();
         return tmp;
