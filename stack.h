@@ -12,10 +12,7 @@ namespace cxx {
         stack(const stack&);
         stack(stack&&) noexcept;
 
-        // This technically is noexcept, but
-        // the copying may throw, so we don't
-        // specify it as such for user clarity.
-        stack& operator=(stack);
+        stack& operator=(stack) noexcept;
 
         void push(const K&, const V&);
         void pop();
@@ -27,7 +24,7 @@ namespace cxx {
         const V& front(const K&) const;
 
         size_t size() const noexcept;
-        size_t count(const K&) const noexcept;
+        size_t count(const K&) const;
 
         void clear();
 
@@ -79,10 +76,9 @@ namespace cxx {
         // Member variables.
         stack_list_t stack_list;
         map_t key_map;
-        size_t size;
 
         // Member methods.
-        stack_data() noexcept;
+        stack_data();
         stack_data(stack_data&&) noexcept;
         stack_data(const stack_data&);
 
@@ -97,6 +93,7 @@ namespace cxx {
         V& front(const K&);
 
         void clear() noexcept;
+        size_t size() noexcept;
     };
 
     // A wrapper for the map's const iterator.
@@ -161,7 +158,7 @@ namespace cxx {
     }
 
     template <class K, class V>
-    stack<K, V>& stack<K, V>::operator=(stack other) {
+    stack<K, V>& stack<K, V>::operator=(stack other) noexcept {
         // Since the stack is a temporary copy,
         // we can now safely swap our contents.
         swap(*this, other);
@@ -213,16 +210,16 @@ namespace cxx {
 
     template <class K, class V>
     size_t stack<K, V>::size() const noexcept {
-        return get_data().size;
+        return get_data().size();
     }
 
     template <class K, class V>
-    size_t stack<K, V>::count(const K& key) const noexcept {
+    size_t stack<K, V>::count(const K& key) const {
         const auto& res = get_data().key_map.find(key);
 
         if (res == get_data().key_map.end()) return 0;
         // Return the size of the corresponding value list.
-        return res->second.get()->list.size();
+        return res->second->list.size();
     }
 
     template <class K, class V>
@@ -255,13 +252,13 @@ namespace cxx {
 
     template <class K, class V>
     stack<K, V>::stack_data& stack<K, V>::get_data() const noexcept {
-        return *data.get();
+        return *data;
     }
 
     template <class K, class V>
     stack<K, V>::stack_data&
     stack<K, V>::get_data(const new_state_t& state) const noexcept {
-        return *state.first.get();
+        return *state.first;
     }
 
     template <class K, class V>
@@ -286,23 +283,20 @@ namespace cxx {
     // -- stack_data -- //
 
     template <class K, class V>
-    stack<K, V>::stack_data::stack_data() noexcept
-            : size(0) {}
+    stack<K, V>::stack_data::stack_data() {}
 
     template <class K, class V>
     stack<K, V>::stack_data::stack_data(stack_data&& other) noexcept
             : stack_list(std::move(other.stack_list))
-            , key_map(std::move(other.key_map))
-            , size(other.size) {}
+            , key_map(std::move(other.key_map)) {}
 
     template <class K, class V>
-    stack<K, V>::stack_data::stack_data(const stack_data& other)
-            : size(0) {
+    stack<K, V>::stack_data::stack_data(const stack_data& other) {
         // We have to make a deep copy.
         std::map<K, typename value_list_t::iterator> next_value;
         for (auto& el : other.stack_list) {
             // Retrieve the (key, value) pair.
-            auto& value_data = *el.lock().get();
+            auto& value_data = *el.lock();
             const K& key = value_data.it->first;
             auto it = next_value.find(key);
             if (it == next_value.end()) {
@@ -310,7 +304,7 @@ namespace cxx {
                     = next_value.insert({key, value_data.list.begin()});
             }
             push(key, it->second->value);
-            ++it;
+            ++it->second;
         }
     }
 
@@ -328,13 +322,13 @@ namespace cxx {
             std::shared_ptr<value_data_t> ptr;
             if (it == key_map.end()) {
                 ptr = std::make_shared<value_data_t>();
-                ptr.get()->list.push_back(new_el);
+                ptr->list.push_back(new_el);
                 // Insert to key_map [member modified].
-                ptr.get()->it = key_map.insert({key, ptr}).first;
+                ptr->it = key_map.insert({key, ptr}).first;
             } else {
                 ptr = it->second;
                 // Insert new element to list [member modified].
-                ptr.get()->list.push_back(new_el);
+                ptr->list.push_back(new_el);
             }
             *stack_it = std::weak_ptr<value_data_t>(ptr); // noexcept
         } catch(...) {
@@ -342,16 +336,15 @@ namespace cxx {
             stack_list.pop_back();
             throw;
         }
-        ++size;
     }
 
     template <class K, class V>
     void stack<K, V>::stack_data::pop() {
-        if (size == 0)
+        if (size() == 0)
             throw std::invalid_argument("Tried to use pop() on empty stack.");
 
         // Otherwise we're good to go and no exceptions will be thrown.
-        auto last = stack_list.back().lock().get();
+        auto last = stack_list.back().lock();
         last->list.pop_back();
         if (last->list.empty()) {
             // Remove the key from the map
@@ -359,12 +352,11 @@ namespace cxx {
             key_map.erase(last->it->first);
         }
         stack_list.pop_back();
-        --size;
     }
 
     template <class K, class V>
     void stack<K, V>::stack_data::pop(const K& k) {
-        if (size == 0)
+        if (size() == 0)
             throw std::invalid_argument("Tried to use pop(const K& k) on empty stack.");
 
         auto last_with_key = key_map.find(k);
@@ -381,22 +373,21 @@ namespace cxx {
             key_map.erase(last_with_key->second->it->first);
         }
         stack_list.erase(to_del);
-        --size;
     }
 
     template <class K, class V>
     std::pair<const K&, V&> stack<K, V>::stack_data::front() {
-        if (size == 0)
+        if (size() == 0)
             throw std::invalid_argument("Tried to use front() on empty stack.");
 
         // Otherwise we're good to go and no exceptions will be thrown.
-        auto last = stack_list.back().lock().get();
+        auto last = stack_list.back().lock();
         return {last->it->first, last->list.back().value};
     }
 
     template <class K, class V>
     V& stack<K, V>::stack_data::front(const K& k) {
-        if (size == 0)
+        if (size() == 0)
             throw std::invalid_argument("Tried to use pop(const K& k) on empty stack.");
 
         auto last_with_key = key_map.find(k);
@@ -411,15 +402,17 @@ namespace cxx {
     void stack<K, V>::stack_data::clear() noexcept {
         stack_list.clear();
         key_map.clear();
-        size = 0;
     }
 
+    template <class K, class V>
+    size_t stack<K, V>::stack_data::size() noexcept {
+        return stack_list.size();
+    }
 
     template <class K, class V>
     stack<K, V>::stack_data::element_t::element_t(const V& value, stack_list_t::iterator it)
             : value(value)
             , it(it) {}
-
 
     // -- const_iterator -- //
 
