@@ -114,7 +114,7 @@ namespace cxx {
         const_iterator operator++(int) noexcept;
 
         const K& operator*() const;
-        const K& operator->() const;
+        const K* operator->() const;
 
         bool operator==(const const_iterator&) const noexcept;
         bool operator!=(const const_iterator&) const noexcept;
@@ -343,15 +343,18 @@ namespace cxx {
         if (size() == 0)
             throw std::invalid_argument("Tried to use pop() on empty stack.");
 
-        // Otherwise we're good to go and no exceptions will be thrown.
+        // We're locking the value_data.
         auto last = stack_list.back().lock();
-        last->list.pop_back();
-        if (last->list.empty()) {
-            // Remove the key from the map
-            // (also deallocates the value_data).
+        if (last->list.size() == 1) {
+            // Remove the key from the map.
+            // (Doesn't deallocate the value_data just yet).
+            // May throw (we're copying the key).
             key_map.erase(last->it->first);
         }
-        stack_list.pop_back();
+        last->list.pop_back(); // nothrow
+        stack_list.pop_back(); // nothrow
+        // The value_data is deallocated if needed along with
+        // the last's last breath.
     }
 
     template <class K, class V>
@@ -363,16 +366,19 @@ namespace cxx {
         if(last_with_key == key_map.end())
             throw std::invalid_argument("Tried to use pop(const K& k) on stack with no key k.");
 
-        // Otherwise we're good to go and no exceptions will be thrown.
+        // We're locking the value_data.
         auto last = last_with_key->second;
         auto to_del = last->list.back().it;
-        last->list.pop_back();
-        if (last->list.empty()) {
-            // Remove the key from the map
-            // (also deallocates the value_data).
+        if (last->list.size() == 1) {
+            // Remove the key from the map.
+            // (Doesn't deallocate the value_data just yet).
+            // May throw (we're copying the key).
             key_map.erase(last_with_key->second->it->first);
         }
-        stack_list.erase(to_del);
+        last->list.pop_back(); // nothrow
+        stack_list.erase(to_del); // nothrow
+        // The value_data is deallocated if needed along with
+        // the last's last breath.
     }
 
     template <class K, class V>
@@ -461,7 +467,7 @@ namespace cxx {
     }
 
     template <class K, class V>
-    const K& stack<K, V>::const_iterator::operator->() const {
-        return operator*();
+    const K* stack<K, V>::const_iterator::operator->() const {
+        return &(it->first);
     }
 }
