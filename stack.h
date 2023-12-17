@@ -300,8 +300,7 @@ namespace cxx {
             const K& key = value_data.it->first;
             auto it = next_value.find(key);
             if (it == next_value.end()) {
-                std::tie(it, std::ignore)
-                    = next_value.insert({key, value_data.list.begin()});
+                it = next_value.insert({key, value_data.list.begin()}).first;
             }
             push(key, it->second->value);
             ++it->second;
