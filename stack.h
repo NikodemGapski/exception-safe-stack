@@ -345,13 +345,12 @@ namespace cxx {
 
         // We're locking the value_data.
         auto last = stack_list.back().lock();
-        if (last->list.size() == 1) {
+        last->list.pop_back(); // nothrow
+        if (last->list.empty()) {
             // Remove the key from the map.
             // (Doesn't deallocate the value_data just yet).
-            // May throw (we're copying the key).
-            key_map.erase(last->it->first);
+            key_map.erase(last->it); // nothrow
         }
-        last->list.pop_back(); // nothrow
         stack_list.pop_back(); // nothrow
         // The value_data is deallocated if needed along with
         // the last's last breath.
@@ -369,13 +368,12 @@ namespace cxx {
         // We're locking the value_data.
         auto last = last_with_key->second;
         auto to_del = last->list.back().it;
-        if (last->list.size() == 1) {
+        last->list.pop_back(); // nothrow
+        if (last->list.empty()) {
             // Remove the key from the map.
             // (Doesn't deallocate the value_data just yet).
-            // May throw (we're copying the key).
-            key_map.erase(last_with_key->second->it->first);
+            key_map.erase(last_with_key->second->it); // nothrow
         }
-        last->list.pop_back(); // nothrow
         stack_list.erase(to_del); // nothrow
         // The value_data is deallocated if needed along with
         // the last's last breath.
