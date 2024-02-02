@@ -5,7 +5,6 @@
 #include <utility>
 #include <vector>
 
-#include <iostream>
 using std::swap;
 using std::invalid_argument;
 using std::pair;
